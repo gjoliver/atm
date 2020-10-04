@@ -47,7 +47,7 @@ def main():
   config = configs.cartpole
 
   # Test with CartPoleV0 game.
-  worker = workers.CartPole()
+  worker = workers.CartPole(config)
   replay_buffer = replay_buffers.ReplayBuffer(
     config, worker.obs_length())
 

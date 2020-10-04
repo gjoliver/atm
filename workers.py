@@ -4,9 +4,9 @@ import gym
 import numpy as np
 
 class CartPole(object):
-  def __init__(self):
+  def __init__(self, config):
     self._env = gym.make('CartPole-v0')
-    self._max_step = 300
+    self._max_step = config.max_step
 
     self._obs_length = self.obs_length()
 
@@ -49,3 +49,26 @@ class CartPole(object):
 
   def eval(self, agent, render=False):
     return len(self.episode(agent, eval=True, render=render))
+
+
+class ATM(object):
+  def __init__(self, config):
+    self._history = config.history
+    self._max_step = config.max_step
+
+  def name(self):
+    return 'atm'
+
+  def obs_length(self):
+    # Price, Volume, Plus 8, 20, 50 day SMA.
+    return 5 * self._history
+
+  def num_actions(self):
+    # Buy, Hold, Sell.
+    return 3
+
+  def episode(self, agent, eval=False, render=False):
+    pass
+
+  def eval(self, agent, render=False):
+    pass
