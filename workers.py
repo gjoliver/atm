@@ -13,6 +13,9 @@ class CartPole(object):
   def __del__(self):
     self._env.close()
 
+  def name(self):
+    return 'cartpole'
+
   def obs_length(self):
     return self._env.observation_space.shape[0]
 

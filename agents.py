@@ -55,6 +55,9 @@ class DQNAgent(object):
 
     return model
 
+  def checkpoint_model(self, path):
+    self._dqn.save(path)
+
   def get_epsilon(self):
     return max(
       self._config.eps_end,

@@ -9,6 +9,7 @@ class DotDict(dict):
 
 cartpole = DotDict({
   'batch_size': 32,
+  'checkpoint_steps': 1000,
   'eps_start': 1,
   'eps_end': 0.01,
   'eps_decay_steps': 100,

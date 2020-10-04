@@ -3,9 +3,12 @@
 import agents
 import configs
 import numpy as np
+import os
 import replay_buffers
+import tensorflow as tf
 import workers
 
+tf.get_logger().setLevel('ERROR')
 
 def train_loop(config, worker, replay_buffer, agent):
   step = 0
@@ -29,6 +32,12 @@ def train_loop(config, worker, replay_buffer, agent):
       print('Step {}, loss {}, epsilon {}'.format(
         step, loss, agent.get_epsilon()))
       print('Eval: {}'.format(worker.eval(agent, step % 1000 == 0)))
+
+    if step % config.checkpoint_steps == 0 and step > 0:
+      chkpt_path = os.path.join(
+        'checkpoints', worker.name(), '{:010d}'.format(step))
+      print('Checkpointing model to: {}'.format(chkpt_path))
+      agent.checkpoint_model(chkpt_path)
 
     # Queue a new episode for next batch.
     replay_buffer.add_episode(worker.episode(agent))
@@ -55,6 +64,11 @@ def main():
     train_loop(config, worker, replay_buffer, agent)
   except KeyboardInterrupt:
     print('Training stopped, final eval: {}'.format(worker.eval(agent, True)))
+
+    chkpt_path = os.path.join(
+      'checkpoints', worker.name(), 'last')
+    print('Checkpointing model to: {}'.format(chkpt_path))
+    agent.checkpoint_model(chkpt_path)
 
 
 if __name__ == "__main__":
