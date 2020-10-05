@@ -1,5 +1,7 @@
 import argparse
+from datetime import datetime
 import glob
+from matplotlib.dates import date2num
 import numpy as np
 import os
 import pandas as pd
@@ -19,27 +21,51 @@ parser.add_argument(
 args = parser.parse_args()
 
 
+def date_to_float(date_str):
+  return date2num(datetime.strptime(date_str, '%Y-%m-%d'))
+
+
+def convert_old_file(df):
+  # Turn string datetime into matplotlib float values.
+  df.date = df.date.map(date_to_float)
+
+  # Keep only the adjusted columns.
+  df.drop(
+    df.columns.difference(['date', 'adj_open', 'adj_high', 'adj_low',
+                           'adj_close', 'adj_volume']),
+    1, inplace=True)
+
+  return df
+
+
+def convert_new_file(df):
+  # Turn string datetime into matplotlib float values.
+  df.Date = df.Date.map(date_to_float)
+
+  offset = df['Adj Close'] - df['Close']
+  df.drop(
+    df.columns.difference(
+      ['Date', 'Open', 'High', 'Low', 'Close', 'Volume']),
+    1, inplace=True)
+
+  # Offset all of the price columns based on the diffs between
+  # Close and Adj Close.
+  # Note(jungong) : this makes sense because we don't support splits.
+  for c in ['Open', 'High', 'Low', 'Close']:
+    df[c] = df[c] + offset
+
+  return df
+
+
 # Columns of output data.
-# Open, High, Low, Close, Volumn, 8-Day, 20-Day, 50-Day, 100-Day, 200-Day
+# Date, Open, High, Low, Close, Volumn, 8-Day, 20-Day, 50-Day, 100-Day, 200-Day
 def convert_file(path):
   df = pd.read_csv(path, sep=',', header=0)
 
   if args.format == 'old':
-    # Keep only the adjusted columns.
-    df.drop(
-      df.columns.difference(
-        ['adj_open', 'adj_high', 'adj_low', 'adj_close', 'adj_volume']),
-      1, inplace=True)
+    df = convert_old_file(df)
   elif args.format == 'new':
-    offset = df['Adj Close'] - df['Close']
-    df.drop(
-      df.columns.difference(['Open', 'High', 'Low', 'Close', 'Volume']),
-      1, inplace=True)
-    # Offset all of the price columns based on the diffs between
-    # Close and Adj Close.
-    # Note(jungong) : this makes sense because we don't support splits.
-    for c in ['Open', 'High', 'Low', 'Close']:
-      df[c] = df[c] + offset
+    df = convert_new_file(df)
   else:
     assert False, 'Must specify --format flag.'
 
