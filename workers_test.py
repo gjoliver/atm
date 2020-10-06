@@ -21,6 +21,8 @@ class WorkersTest(unittest.TestCase):
     mock_actions = [1] * 30
     # Buy at the 8th day, and sell at the 20th day.
     mock_actions[8] = 0
+    # Buy again. Should do nothing.
+    mock_actions[10] = 0
     mock_actions[20] = 2
     worker = workers.ATM(configs.atm)
     worker.eval(MockAgent(mock_actions), render=True)

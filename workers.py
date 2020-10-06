@@ -1,5 +1,6 @@
 # Workers for different tasks.
 
+from enum import Enum
 import glob
 import gym
 import numpy as np
@@ -64,12 +65,25 @@ class CartPole(Worker):
     return len(self.episode(agent, eval=True, render=render))
 
 
+class Trade(Enum):
+  BUY = 0
+  HOLD = 1
+  SELL = 2
+
+
 class _Position(object):
   # TODO(jungong) : think about reward more.
   # Right now, always 0 reward until the end of an episode.
   def __init__(self):
+    # TODO(jungong) : handle cumulative rewards.
+    self.reset()
+
+  def reset(self):
     self._position = 0  # 1: Long, -1: Short.
     self._entry_price = None
+
+  def has_position(self):
+    return self._position != 0
 
   def reward(self, close_price):
     if self._position == 0:
@@ -87,6 +101,11 @@ class _Position(object):
     if action == 1:  # Hold
       return 0, False
 
+    if ((action == 0 and self._position > 0) or
+        (action == 2 and self._position < 0)):
+      # No change.
+      return 0, False
+
     if action == 0 and self._position == 0:  # Open long position.
       self._position = 1
       self._entry_price = price
@@ -99,7 +118,9 @@ class _Position(object):
 
     if ((action == 0 and self._position == -1) or  # Close short position.
         (action == 2 and self._position == 1)):    # Close long position.
-      return self.reward(price), True
+      r = self.reward(price)
+      self.reset()
+      return r, True
 
 
 class ATM(Worker):
@@ -140,26 +161,28 @@ class ATM(Worker):
     position = _Position()
 
     obs = self.get_obs(data, start)
+    done = False
     for i in range(self._max_step):  # At most _max_step steps.
       price = data[start + i, 4]
 
       # Decide what to do.
-      action = agent.get_action(obs)
-      reward, done = position.action(action, price)
-
       if done:
-        next_obs = obs
+        # Trade closed. Always hold.
+        action = 1
       else:
-        next_obs = self.get_obs(data, start + i)
+        action = agent.get_action(obs)
+
+      # Act.
+      reward, done = position.action(action, price)
+      next_obs = self.get_obs(data, start + i)
 
       episode.append([obs, action, reward, next_obs, done])
+      obs = next_obs
+
       if action_type is None and action != 1:
         action_type = action
       # Whenever a position is open, action_mask should always be True.
-      action_mask.append(action_type is not None)
-
-      if done or i >= self._max_step:
-        break
+      action_mask.append(position.has_position())
 
     if render:
       # TODO(jungong) : plot actions in the chart.
