@@ -45,7 +45,7 @@ atm = DotDict({
   'learning_rate_final': 0.0001,
   'learning_rate_decay_rate': 0.1,
   'learning_rate_decay_step': 1000,
-  'max_step': 30,  # Trade the next 30 days.
+  'max_step': 30,  # Max episode length.
   'num_hidden_layers': 3,
   'optimizer_epsilon': 0.00002,
   'replay_buffer_size': 100000,

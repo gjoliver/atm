@@ -20,7 +20,12 @@ class CappedExpDecayLR(optimizers.schedules.ExponentialDecay):
     return tf.math.maximum(self._final_learning_rate, super().__call__(step))
 
 
-class DQNAgent(object):
+class Agent(object):
+  def get_action(self, obs, eval=False):
+    assert False, 'Not implemented.'
+
+
+class DQNAgent(Agent):
   def __init__(self, obs_length, num_actions, config):
     self._obs_length = obs_length
     self._num_actions = num_actions
