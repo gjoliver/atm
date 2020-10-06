@@ -20,19 +20,22 @@ class WorkersTest(unittest.TestCase):
     # Init to hold.
     mock_actions = [1] * 30
     # Buy at the 8th day, and sell at the 20th day.
-    mock_actions[8] = 0
+    mock_actions[8] = workers.T.BUY
     # Buy again. Should do nothing.
-    mock_actions[10] = 0
-    mock_actions[20] = 2
+    mock_actions[10] = workers.T.BUY
+    mock_actions[20] = workers.T.SELL
     worker = workers.ATM(configs.atm)
     worker.eval(MockAgent(mock_actions), render=True)
 
   def test_render_sell(self):
     # Init to hold.
     mock_actions = [1] * 30
-    # Sell at the 9th day, and buy at the 28th day.
-    mock_actions[9] = 2
-    mock_actions[28] = 0
+    # First short.
+    mock_actions[3] = workers.T.SELL
+    mock_actions[10] = workers.T.BUY
+    # Second long.
+    mock_actions[18] = workers.T.BUY
+    mock_actions[28] = workers.T.SELL
     worker = workers.ATM(configs.atm)
     worker.eval(MockAgent(mock_actions), render=True)
 

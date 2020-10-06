@@ -1,6 +1,6 @@
 # Workers for different tasks.
 
-from enum import Enum
+from enum import IntEnum
 import glob
 import gym
 import numpy as np
@@ -65,10 +65,16 @@ class CartPole(Worker):
     return len(self.episode(agent, eval=True, render=render))
 
 
-class Trade(Enum):
+class T(IntEnum):
   BUY = 0
   HOLD = 1
   SELL = 2
+
+
+class PT(IntEnum):
+  NO_POSITION = 0
+  LONG = 1
+  SHORT = 2
 
 
 class _Position(object):
@@ -82,11 +88,16 @@ class _Position(object):
     self._position = 0  # 1: Long, -1: Short.
     self._entry_price = None
 
-  def has_position(self):
-    return self._position != 0
+  def type(self):
+    if self._position == 0:
+      return PT.NO_POSITION
+    elif self._position > 0:
+      return PT.LONG
+    else:
+      return PT.SHORT
 
   def reward(self, close_price):
-    if self._position == 0:
+    if self.type() == PT.NO_POSITION:
       return 0
     pl = (close_price - self._entry_price) / self._entry_price
     # Use percentage number (note, not percentage) as reward.
@@ -94,33 +105,37 @@ class _Position(object):
     # Also cap reward at 10% profit or loss.
     pl = np.sign(pl) * min(0.1, abs(pl)) * 100
     # If this is a short position, we should flip the reward.
-    if self._position < 0:
+    if self.type() == PT.SHORT:
       pl = -pl
 
   def action(self, action, price):
-    if action == 1:  # Hold
+    if action == T.HOLD:
       return 0, False
 
-    if ((action == 0 and self._position > 0) or
-        (action == 2 and self._position < 0)):
+    if ((action == T.BUY and self.type() == PT.LONG) or
+        (action == T.SELL and self.type() == PT.SHORT)):
       # No change.
       return 0, False
 
-    if action == 0 and self._position == 0:  # Open long position.
+    # Open long position.
+    if action == T.BUY and self.type() == PT.NO_POSITION:
       self._position = 1
       self._entry_price = price
       return 0, False
 
-    if action == 2 and self._position == 0:  # Open short position.
+    # Open short position.
+    if action == T.SELL and self.type() == PT.NO_POSITION:
       self._position = -1
       self._entry_price = price
       return 0, False
 
-    if ((action == 0 and self._position == -1) or  # Close short position.
-        (action == 2 and self._position == 1)):    # Close long position.
+    if ((action == T.BUY and self.type() == PT.SHORT) or  # Buy to close.
+        (action == T.SELL and self.type() == PT.LONG)):   # Sell to close.
       r = self.reward(price)
       self.reset()
       return r, True
+
+    assert False, 'Should never get here {},{}'.format(action, price)
 
 
 class ATM(Worker):
@@ -155,39 +170,39 @@ class ATM(Worker):
 
     # Random starting index.
     episode = []
-    action_mask = [False] * self._history
-    action_type = None
+    # For rendering purpose.
+    pos_mask = [PT.NO_POSITION] * self._history
     start = random.randint(BUFFER_START, len(data) - BUFFER_END)
     position = _Position()
 
     obs = self.get_obs(data, start)
-    done = False
     for i in range(self._max_step):  # At most _max_step steps.
       price = data[start + i, 4]
-
       # Decide what to do.
-      if done:
-        # Trade closed. Always hold.
-        action = 1
-      else:
-        action = agent.get_action(obs)
+      action = agent.get_action(obs)
 
       # Act.
       reward, done = position.action(action, price)
-      next_obs = self.get_obs(data, start + i)
+      next_obs = self.get_obs(data, start + i + 1)
 
       episode.append([obs, action, reward, next_obs, done])
       obs = next_obs
 
-      if action_type is None and action != 1:
-        action_type = action
-      # Whenever a position is open, action_mask should always be True.
-      action_mask.append(position.has_position())
+      # Remember the state of the position for rendering purpose.
+      pos_mask.append(position.type())
+
+      if done:
+        if not eval:
+          # Quickly return if not in eval mode, and a trade is done.
+          break
+        else:
+          # In eval mode. Reset done and continue trading.
+          done = False
 
     if render:
       # TODO(jungong) : plot actions in the chart.
       plot.plot_chart(data[start - self._history:start + len(episode), :],
-                      dict(mask=action_mask, type=action_type))
+                      mask=pos_mask)
 
     return episode
 
