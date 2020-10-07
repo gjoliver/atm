@@ -176,7 +176,7 @@ class ATM(Worker):
     return ((sub_array - cur) / cur).flatten().tolist()
 
   def one_episode(self, data, action_fn, render):
-    position = _Position()
+    cur_pos = _Position()
     # Random starting index.
     episode = []
     # For rendering purpose.
@@ -191,11 +191,11 @@ class ATM(Worker):
       # TODO(jungong) : add stop-loss.
       if i == len(data) - 1:
         # This is the last frame. Make sure we close whatever is open.
-        reward, done = position.force_close(price)
+        reward, done = cur_pos.force_close(price)
       else:
         # Otherwise, do whatever the agent tells us to.
         action = action_fn(obs)
-        reward, done = position.action(action, price)
+        reward, done = cur_pos.action(action, price)
       next_obs = self.get_obs(data, i + 1)
 
       # Scale the percetage reward 100x. So if we made 5% gain,
@@ -205,24 +205,24 @@ class ATM(Worker):
       obs = next_obs
 
       # Remember the state of the position for rendering purpose.
-      pos_mask.append(position.type())
+      pos_mask.append(cur_pos.type())
 
       if done:
         if not eval:
-          # Quickly return if not in eval mode, and a trade is done.
+          # Return if not in eval mode. We use a single trade for training.
           break
         else:
           # In eval mode. Reset done and continue trading.
           done = False
 
     # After trading finishes, we should have no position.
-    assert position.type() == PT.NO_POSITION
+    assert cur_pos.type() == PT.NO_POSITION
 
     if render:
       # TODO(jungong) : plot actions in the chart.
       plot.plot_chart(data, mask=pos_mask)
 
-    return episode, position
+    return episode, cur_pos
 
   def episode(self, agent, eval=False, render=False):
     fs = glob.glob('data/train/*.npy')
