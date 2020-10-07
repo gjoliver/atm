@@ -33,6 +33,7 @@ cartpole = DotDict({
 atm = DotDict({
   'batch_size': 32,
   'checkpoint_steps': 1000,
+  'earliest_start_idx': 200,
   'eps_start': 0.3,
   'eps_end': 0.01,
   'eps_decay_steps': 1000,

@@ -81,67 +81,80 @@ class _Position(object):
   # TODO(jungong) : think about reward more.
   # Right now, always 0 reward until the end of an episode.
   def __init__(self):
+    self._asset = 1.0
     # TODO(jungong) : handle cumulative rewards.
-    self.reset()
+    self.reset_position()
 
-  def reset(self):
-    self._position = 0  # 1: Long, -1: Short.
+  def reset_position(self):
+    self._pt = PT.NO_POSITION
     self._entry_price = None
 
+  def asset(self):
+    return self._asset
+
   def type(self):
-    if self._position == 0:
-      return PT.NO_POSITION
-    elif self._position > 0:
-      return PT.LONG
-    else:
-      return PT.SHORT
+    return self._pt
 
   def reward(self, close_price):
-    if self.type() == PT.NO_POSITION:
+    if self._pt == PT.NO_POSITION:
       return 0
     pl = (close_price - self._entry_price) / self._entry_price
     # Use percentage number (note, not percentage) as reward.
     # E.g., if the position is up 6%, reward is 6.
     # Also cap reward at 10% profit or loss.
-    pl = np.sign(pl) * min(0.1, abs(pl)) * 100
+    pl = np.sign(pl) * min(0.1, abs(pl))
     # If this is a short position, we should flip the reward.
-    if self.type() == PT.SHORT:
+    if self._pt == PT.SHORT:
       pl = -pl
+    return pl
 
   def action(self, action, price):
     if action == T.HOLD:
       return 0, False
 
-    if ((action == T.BUY and self.type() == PT.LONG) or
-        (action == T.SELL and self.type() == PT.SHORT)):
+    if ((action == T.BUY and self._pt == PT.LONG) or
+        (action == T.SELL and self._pt == PT.SHORT)):
       # No change.
       return 0, False
 
     # Open long position.
-    if action == T.BUY and self.type() == PT.NO_POSITION:
-      self._position = 1
+    if action == T.BUY and self._pt == PT.NO_POSITION:
+      self._pt = PT.LONG
       self._entry_price = price
       return 0, False
 
     # Open short position.
-    if action == T.SELL and self.type() == PT.NO_POSITION:
-      self._position = -1
+    if action == T.SELL and self._pt == PT.NO_POSITION:
+      self._pt = PT.SHORT
       self._entry_price = price
       return 0, False
 
-    if ((action == T.BUY and self.type() == PT.SHORT) or  # Buy to close.
-        (action == T.SELL and self.type() == PT.LONG)):   # Sell to close.
+    if ((action == T.BUY and self._pt == PT.SHORT) or  # Buy to close.
+        (action == T.SELL and self._pt == PT.LONG)):   # Sell to close.
       r = self.reward(price)
-      self.reset()
+
+      self._asset *= (1.0 + r)
+      self.reset_position()
+
       return r, True
 
     assert False, 'Should never get here {},{}'.format(action, price)
+
+  def force_close(self, price):
+    # Close whatever position that is currently being held.
+    if self._pt == PT.LONG:
+      return self.action(T.SELL, price)
+    elif self._pt == PT.SHORT:
+      return self.action(T.BUY, price)
+    else:
+      return self.action(T.HOLD, price)
 
 
 class ATM(Worker):
   def __init__(self, config):
     self._history = config.history
     self._max_step = config.max_step
+    self._earliest_start_idx = config.earliest_start_idx
 
   def name(self):
     return 'atm'
@@ -162,30 +175,33 @@ class ATM(Worker):
     cur = sub_array[-1, 3]
     return ((sub_array - cur) / cur).flatten().tolist()
 
-  def episode_for_file(self, file, agent, eval, render):
-    data = np.load(file)
-
-    BUFFER_START = 200
-    BUFFER_END = self._max_step
-
+  def one_episode(self, data, action_fn, render):
+    position = _Position()
     # Random starting index.
     episode = []
     # For rendering purpose.
     pos_mask = [PT.NO_POSITION] * self._history
-    start = random.randint(BUFFER_START, len(data) - BUFFER_END)
-    position = _Position()
 
-    obs = self.get_obs(data, start)
-    for i in range(self._max_step):  # At most _max_step steps.
-      price = data[start + i, 4]
-      # Decide what to do.
-      action = agent.get_action(obs)
+    # data only contains the period we are supposed to trade on.
+    # So we know that the first trading day is on self._history row.
+    obs = self.get_obs(data, self._history)
+    for i in range(self._history, len(data)):
+      price = data[i, 4]
 
-      # Act.
-      reward, done = position.action(action, price)
-      next_obs = self.get_obs(data, start + i + 1)
+      # TODO(jungong) : add stop-loss.
+      if i == len(data) - 1:
+        # This is the last frame. Make sure we close whatever is open.
+        reward, done = position.force_close(price)
+      else:
+        # Otherwise, do whatever the agent tells us to.
+        action = action_fn(obs)
+        reward, done = position.action(action, price)
+      next_obs = self.get_obs(data, i + 1)
 
-      episode.append([obs, action, reward, next_obs, done])
+      # Scale the percetage reward 100x. So if we made 5% gain,
+      # the reward would be 5.0. And if we just had a 8% loss, the reward
+      # would be -8.0.
+      episode.append([obs, action, reward * 100.0, next_obs, done])
       obs = next_obs
 
       # Remember the state of the position for rendering purpose.
@@ -199,17 +215,42 @@ class ATM(Worker):
           # In eval mode. Reset done and continue trading.
           done = False
 
+    # After trading finishes, we should have no position.
+    assert position.type() == PT.NO_POSITION
+
     if render:
       # TODO(jungong) : plot actions in the chart.
-      plot.plot_chart(data[start - self._history:start + len(episode), :],
-                      mask=pos_mask)
+      plot.plot_chart(data, mask=pos_mask)
 
-    return episode
+    return episode, position
 
   def episode(self, agent, eval=False, render=False):
     fs = glob.glob('data/train/*.npy')
-    return self.episode_for_file(random.sample(fs, 1), agent, eval, render)
+    data = np.load(random.sample(fs, 1))
 
-  def eval(self, agent, render=False):
-    test_file = 'data/test/SPY.npy'
-    return self.episode_for_file(test_file, agent, True, render)
+    # Pick a random point to trade.
+    start = random.randint(self._earliest_start_idx,
+                           len(data) - self._max_step)
+    # Take out the section of the data we are going to trade on.
+    data = data[start - self._history:start + self._max_step,:]
+
+    def action_fn(obs):
+      return agent.get_action(obs, eval=eval)
+
+    # Now actually generate the episode.
+    episode, _ = self.one_episode(data, action_fn, render)
+    return episode
+
+  def eval(self, agent, num_days, render=False):
+    data = np.load('data/test/SPY.npy')
+
+    # For eval, we are going to trade the hardcoded period starting
+    # the 3000th row (late 2015).
+    data = data[3000 - self._history:3000 + num_days,:]
+
+    def action_fn(obs):
+      return agent.get_action(obs, eval=True)
+
+    _, position = self.one_episode(data, action_fn, render)
+
+    return position.asset()
