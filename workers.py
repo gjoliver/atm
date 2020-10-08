@@ -224,9 +224,17 @@ class ATM(Worker):
 
     return episode, cur_pos
 
-  def episode(self, agent, eval=False, render=False):
+  def _load_good_data(self):
     fs = glob.glob('data/train/*.npy')
-    data = np.load(random.sample(fs, 1))
+    data = np.load(random.sample(fs, 1)[0])
+    # There may be tickers that have really short trading history.
+    # So keep loading until we find a good stock.
+    while len(data) < self._earliest_start_idx + self._max_step:
+      data = np.load(random.sample(fs, 1)[0])
+    return data
+
+  def episode(self, agent, eval=False, render=False):
+    data = self._load_good_data()
 
     # Pick a random point to trade.
     start = random.randint(self._earliest_start_idx,
@@ -235,13 +243,13 @@ class ATM(Worker):
     data = data[start - self._history:start + self._max_step,:]
 
     def action_fn(obs):
-      return agent.get_action(obs, eval=eval)
+      return agent.get_action(self._obs_to_tensor(obs), eval=eval)
 
     # Now actually generate the episode.
     episode, _ = self.one_episode(data, action_fn, render)
     return episode
 
-  def eval(self, agent, num_days, render=False):
+  def eval(self, agent, num_days = 300, render=False):
     data = np.load('data/test/SPY.npy')
 
     # For eval, we are going to trade the hardcoded period starting
@@ -249,7 +257,7 @@ class ATM(Worker):
     data = data[3000 - self._history:3000 + num_days,:]
 
     def action_fn(obs):
-      return agent.get_action(obs, eval=True)
+      return agent.get_action(self._obs_to_tensor(obs), eval=True)
 
     _, position = self.one_episode(data, action_fn, render)
 

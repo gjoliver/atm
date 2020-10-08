@@ -31,7 +31,7 @@ def train_loop(config, worker, replay_buffer, agent):
     if step % config.eval_steps == 0:
       print('Step {}, loss {}, epsilon {}'.format(
         step, loss, agent.get_epsilon()))
-      print('Eval: {}'.format(worker.eval(agent, step % 1000 == 0)))
+      print('Eval: {}'.format(worker.eval(agent)))
 
     if step % config.checkpoint_steps == 0 and step > 0:
       chkpt_path = os.path.join(
@@ -44,10 +44,10 @@ def train_loop(config, worker, replay_buffer, agent):
 
 
 def main():
-  config = configs.cartpole
+  config = configs.atm
 
   # Test with CartPoleV0 game.
-  worker = workers.CartPole(config)
+  worker = workers.ATM(config)
   replay_buffer = replay_buffers.ReplayBuffer(
     config, worker.obs_length())
 
