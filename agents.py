@@ -103,6 +103,12 @@ class DQNAgent(Agent):
 
       loss = tf.reduce_mean(self._dqn.loss(q_target, q))
 
+      '''
+      print(q)
+      print(q_target)
+      print(loss)
+      '''
+
       trainable_vars = self._dqn.trainable_variables
       gradients = tape.gradient(loss, trainable_vars)
       self._dqn.optimizer.apply_gradients(zip(gradients, trainable_vars))

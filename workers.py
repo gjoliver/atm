@@ -98,12 +98,8 @@ class _Position(object):
   def reward(self, close_price):
     if self._pt == PT.NO_POSITION:
       return 0
+    # Use percentage P&L number as reward.
     pl = (close_price - self._entry_price) / self._entry_price
-    # Use percentage number (note, not percentage) as reward.
-    # E.g., if the position is up 6%, reward is 6.
-    # Also cap reward at 10% profit or loss.
-    pl = np.sign(pl) * min(0.1, abs(pl))
-    # If this is a short position, we should flip the reward.
     if self._pt == PT.SHORT:
       pl = -pl
     return pl
@@ -143,11 +139,14 @@ class _Position(object):
   def force_close(self, price):
     # Close whatever position that is currently being held.
     if self._pt == PT.LONG:
-      return self.action(T.SELL, price)
+      action = T.SELL
     elif self._pt == PT.SHORT:
-      return self.action(T.BUY, price)
+      action = T.BUY
     else:
-      return self.action(T.HOLD, price)
+      action = T.HOLD
+    reward, done = self.action(action, price)
+
+    return action, reward, done
 
 
 class ATM(Worker):
@@ -191,17 +190,14 @@ class ATM(Worker):
       # TODO(jungong) : add stop-loss.
       if i == len(data) - 1:
         # This is the last frame. Make sure we close whatever is open.
-        reward, done = cur_pos.force_close(price)
+        action, reward, done = cur_pos.force_close(price)
       else:
         # Otherwise, do whatever the agent tells us to.
         action = action_fn(obs)
         reward, done = cur_pos.action(action, price)
       next_obs = self.get_obs(data, i + 1)
 
-      # Scale the percetage reward 100x. So if we made 5% gain,
-      # the reward would be 5.0. And if we just had a 8% loss, the reward
-      # would be -8.0.
-      episode.append([obs, action, reward * 100.0, next_obs, done])
+      episode.append([obs, action, reward, next_obs, done])
       obs = next_obs
 
       # Remember the state of the position for rendering purpose.
