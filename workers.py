@@ -6,6 +6,7 @@ import gym
 import numpy as np
 import plot
 import random
+import util
 
 
 class Worker(object):
@@ -98,11 +99,8 @@ class _Position(object):
   def reward(self, close_price):
     if self._pt == PT.NO_POSITION:
       return 0
-    # Use percentage P&L number as reward.
-    pl = (close_price - self._entry_price) / self._entry_price
-    if self._pt == PT.SHORT:
-      pl = -pl
-    return pl
+    pl = util.ScalePL(close_price, self._entry_price)
+    return pl if self._pt == PT.LONG else -pl
 
   def action(self, action, price):
     if action == T.HOLD:
@@ -167,12 +165,29 @@ class ATM(Worker):
     return 3
 
   def get_obs(self, data, idx):
-    # Select self._history rows and all columns except for date.
-    sub_array = data[idx - self._history:idx, 1:]
+    # Select self._history rows and all columns except for date,
+    # which is column 0.
+    # Make a copy so we don't modify the original array.
+    sub_array = data[idx - self._history:idx, 1:].copy()
     # The first columns are Open, High, Low, Close. So current close
     # price is column 3 (0-indexed).
     cur = sub_array[-1, 3]
-    return ((sub_array - cur) / cur).flatten().tolist()
+
+    scale_price = np.vectorize(lambda x: util.ScalePL(x, cur))
+    for col in range(10):
+      # Column 4 is volume, we will normalize it next.
+      if col == 4: continue
+      sub_array[:, col] = scale_price(sub_array[:, col])
+
+    # Now scale volume column.
+    vol_min = sub_array[:, 4].min()
+    vol_max = sub_array[:, 4].max()
+    scale_volume = np.vectorize(lambda x: util.ScaleLinear(x, vol_min, vol_max))
+    sub_array[:, 4] = scale_volume(sub_array[:, 4])
+
+    # Roughly scales raw price to a feature in the range of [-1.0, 1.0].
+    # This is so the same network can be used on $1000 stock or $1 stock.
+    return sub_array.flatten().tolist()
 
   def one_episode(self, data, action_fn, render):
     cur_pos = _Position()
@@ -222,7 +237,8 @@ class ATM(Worker):
 
   def _load_good_data(self):
     fs = glob.glob('data/train/*.npy')
-    data = np.load(random.sample(fs, 1)[0])
+    f = random.sample(fs, 1)[0]
+    data = np.load(f)
     # There may be tickers that have really short trading history.
     # So keep loading until we find a good stock.
     while len(data) < self._earliest_start_idx + self._max_step:
@@ -235,6 +251,7 @@ class ATM(Worker):
     # Pick a random point to trade.
     start = random.randint(self._earliest_start_idx,
                            len(data) - self._max_step)
+
     # Take out the section of the data we are going to trade on.
     data = data[start - self._history:start + self._max_step,:]
 

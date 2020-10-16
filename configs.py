@@ -42,8 +42,8 @@ atm = DotDict({
   'gamma': 0.95,  # If we do n-step update, gamma needs to be updated too.
   'hidden_layer_size': 500,
   'history': 60,  # Given data from last 60 days.
-  'learning_rate_initial': 0.01,
-  'learning_rate_final': 0.0001,
+  'learning_rate_initial': 0.0001,
+  'learning_rate_final': 0.000001,
   'learning_rate_decay_rate': 0.1,
   'learning_rate_decay_step': 1000,
   'max_step': 30,  # Max episode length.

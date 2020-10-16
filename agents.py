@@ -44,7 +44,10 @@ class DQNAgent(Agent):
     model.add(layers.Input(shape=(self._obs_length,)))
     # Hidden
     for _ in range(self._config.num_hidden_layers):
-      model.add(layers.Dense(self._config.hidden_layer_size, activation='relu'))
+      model.add(layers.Dense(
+        self._config.hidden_layer_size, activation='relu',
+        kernel_initializer=initializers.RandomNormal(stddev=0.01),
+        bias_initializer=initializers.Zeros()))
     # Q values.
     model.add(layers.Dense(self._num_actions, activation=None))
 
@@ -104,9 +107,14 @@ class DQNAgent(Agent):
       loss = tf.reduce_mean(self._dqn.loss(q_target, q))
 
       '''
-      print(q)
-      print(q_target)
-      print(loss)
+      if self._step % 100 == 0:
+        np.set_printoptions(suppress=True)
+        print(obs)
+        print(rewards)
+        print(max_next_qs)
+        print(q_target)
+        print(q)
+        print(loss)
       '''
 
       trainable_vars = self._dqn.trainable_variables

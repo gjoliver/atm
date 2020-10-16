@@ -83,6 +83,13 @@ def convert():
     print('Converting ... {}'.format(f))
 
     d = convert_file(f).to_numpy()
+
+    # Turn all of the price columns into log scale,
+    # so sudden pop/drop doesn't screw our percentage
+    # diff computation. Skip column 0 (Date) and 5 (Volume).
+    for col in [1, 2, 3, 4, 6, 7, 8, 9, 10]:
+      d[:, col] = np.log(d[:, col] + 1)
+
     # We know f ends with '.csv'.
     np.save(f[:-4], d)
 
