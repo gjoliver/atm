@@ -107,9 +107,10 @@ class DQNAgent(Agent):
       loss = tf.reduce_mean(self._dqn.loss(q_target, q))
 
       '''
-      if self._step % 100 == 0:
+      if np.any(np.isnan(q)):
         np.set_printoptions(suppress=True)
         print(obs)
+        print(np.any(np.isnan(obs)))
         print(rewards)
         print(max_next_qs)
         print(q_target)

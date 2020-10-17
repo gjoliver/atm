@@ -18,6 +18,12 @@ parser.add_argument(
   help=('"old" has adj columns for all of open/high/low/close/volume, '
         'while "new" only has adj-close, and does NOT support splits.'))
 
+parser.add_argument(
+  '--log_scale_price',
+  type=bool,
+  default=True,
+  help=('Whether to turn price columns into log scale.'))
+
 args = parser.parse_args()
 
 
@@ -34,6 +40,15 @@ def convert_old_file(df):
     df.columns.difference(['date', 'adj_open', 'adj_high', 'adj_low',
                            'adj_close', 'adj_volume']),
     1, inplace=True)
+
+  df.rename({
+    'date': 'date',
+    'adj_open': 'open',
+    'adj_high': 'high',
+    'adj_low': 'low',
+    'adj_close': 'close',
+    'adj_volume': 'volume',
+  }, axis=1, inplace=True)
 
   return df
 
@@ -54,6 +69,15 @@ def convert_new_file(df):
   for c in ['Open', 'High', 'Low', 'Close']:
     df[c] = df[c] + offset
 
+  df = df.rename({
+    'Date': 'date',
+    'Open': 'open',
+    'High': 'high',
+    'Low': 'low',
+    'Close': 'close',
+    'Volume': 'volume',
+  }, axis=1, inplace=True)
+
   return df
 
 
@@ -61,6 +85,9 @@ def convert_new_file(df):
 # Date, Open, High, Low, Close, Volumn, 8-Day, 20-Day, 50-Day, 100-Day, 200-Day
 def convert_file(path):
   df = pd.read_csv(path, sep=',', header=0)
+
+  # Drop rows with any missing data.
+  df = df.dropna(how = 'any')
 
   if args.format == 'old':
     df = convert_old_file(df)
@@ -74,6 +101,22 @@ def convert_file(path):
     col_name = 'sma{}'.format(ma)
     df[col_name] = df.iloc[:,3].rolling(window=ma, min_periods=1).mean()
 
+  # Turn all of the price columns into log scale,
+  # so sudden pop/drop doesn't screw our percentage diff computation.
+  # TODO(jungong) : maybe we should do this before calculating all the
+  # MAs. Not sure.
+  if args.log_scale_price:
+    for col in ('open',
+                'high',
+                'low',
+                'close',
+                'sma8',
+                'sma20',
+                'sma50',
+                'sma100',
+                'sma200'):
+      df[col] = df[col].apply(lambda x: np.log(x + 1))
+
   return df
 
 
@@ -83,12 +126,6 @@ def convert():
     print('Converting ... {}'.format(f))
 
     d = convert_file(f).to_numpy()
-
-    # Turn all of the price columns into log scale,
-    # so sudden pop/drop doesn't screw our percentage
-    # diff computation. Skip column 0 (Date) and 5 (Volume).
-    for col in [1, 2, 3, 4, 6, 7, 8, 9, 10]:
-      d[:, col] = np.log(d[:, col] + 1)
 
     # We know f ends with '.csv'.
     np.save(f[:-4], d)
