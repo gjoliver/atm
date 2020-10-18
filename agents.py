@@ -107,7 +107,7 @@ class DQNAgent(Agent):
       loss = tf.reduce_mean(self._dqn.loss(q_target, q))
 
       '''
-      if np.any(np.isnan(q)):
+      if self._step % 100 == 0:
         np.set_printoptions(suppress=True)
         print(obs)
         print(np.any(np.isnan(obs)))

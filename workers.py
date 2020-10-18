@@ -62,7 +62,7 @@ class CartPole(Worker):
       return agent.get_action(self._obs_to_tensor(obs), eval)
     return self.play(action_fn)
 
-  def eval(self, agent, render=False):
+  def eval(self, agent, render=False, png_path=None):
     return len(self.episode(agent, eval=True, render=render))
 
 
@@ -189,7 +189,7 @@ class ATM(Worker):
     # This is so the same network can be used on $1000 stock or $1 stock.
     return sub_array.flatten().tolist()
 
-  def one_episode(self, data, action_fn, render):
+  def one_episode(self, data, action_fn, render, png_path):
     cur_pos = _Position()
     # Random starting index.
     episode = []
@@ -231,7 +231,7 @@ class ATM(Worker):
 
     if render:
       # TODO(jungong) : plot actions in the chart.
-      plot.plot_chart(data, mask=pos_mask)
+      plot.plot_chart(data, mask=pos_mask, png_path=png_path)
 
     return episode, cur_pos
 
@@ -259,10 +259,10 @@ class ATM(Worker):
       return agent.get_action(self._obs_to_tensor(obs), eval=eval)
 
     # Now actually generate the episode.
-    episode, _ = self.one_episode(data, action_fn, render)
+    episode, _ = self.one_episode(data, action_fn, render, None)
     return episode
 
-  def eval(self, agent, num_days = 300, render=False):
+  def eval(self, agent, num_days = 300, render=False, png_path=None):
     data = np.load('data/test/SPY.npy')
 
     # For eval, we are going to trade the hardcoded period starting
@@ -272,6 +272,6 @@ class ATM(Worker):
     def action_fn(obs):
       return agent.get_action(self._obs_to_tensor(obs), eval=True)
 
-    _, position = self.one_episode(data, action_fn, render)
+    _, position = self.one_episode(data, action_fn, render, png_path)
 
     return position.asset()

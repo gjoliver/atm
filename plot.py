@@ -27,7 +27,7 @@ def _get_bitmask_and_colors(mask):
   return bitmask, colors
 
 
-def plot_chart(data, mask):
+def plot_chart(data, mask, png_path):
   dates = [num2date(d) for d in data[:,0]]
   ohlc_data = data[:,1:6]
 
@@ -69,4 +69,9 @@ def plot_chart(data, mask):
       alpha=0.5))
   axes[2].set_ylabel('Volume')
 
-  plt.show()
+  if png_path:
+    fig.savefig(png_path)
+  else:
+    plt.show()
+
+  plt.close(fig)

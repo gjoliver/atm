@@ -18,6 +18,9 @@ def train_loop(base_dir, config, worker, replay_buffer, agent):
     f.write('Step,Loss,Eval\n')
 
   chkpt_base_dir = os.path.join(base_dir, 'checkpoints')
+  os.makedirs(chkpt_base_dir, exist_ok=True)
+  eval_base_dir = os.path.join(base_dir, 'eval')
+  os.makedirs(eval_base_dir, exist_ok=True)
 
   step = 0
   while step < config.training_steps:
@@ -37,7 +40,8 @@ def train_loop(base_dir, config, worker, replay_buffer, agent):
       agent.update_target_network()
 
     if step % config.eval_steps == 0:
-      eval = worker.eval(agent)
+      png_path = os.path.join(eval_base_dir, '{}.png'.format(step))
+      eval = worker.eval(agent, render=True, png_path=png_path)
       print('Step {}, loss {}, epsilon {}, eval {}'.format(
         step, loss, agent.get_epsilon(), eval))
       with open(progress_file, 'a') as f:
@@ -75,8 +79,9 @@ def main():
   try:
     train_loop(base_dir, config, worker, replay_buffer, agent)
   except KeyboardInterrupt:
+    png_path = os.path.join(base_dir, 'eval', 'last.png')
     print('Training stopped, final eval: {}'.format(
-      worker.eval(agent, True)))
+      worker.eval(agent, render=True, png_path=png_path)))
 
     chkpt_path = os.path.join(base_dir, 'checkpoints', 'last')
     print('Checkpointing model to: {}'.format(chkpt_path))
