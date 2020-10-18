@@ -2,6 +2,7 @@
 
 import agents
 import configs
+from datetime import datetime
 import numpy as np
 import os
 import replay_buffers
@@ -68,7 +69,8 @@ def main():
                           worker.num_actions(),
                           config)
 
-  base_dir = os.path.join('__out__', worker.name())
+  base_dir = os.path.join('__out__', worker.name() + '_' +
+                          datetime.now().strftime('%Y%m%d%H%M'))
   os.makedirs(base_dir, exist_ok=True)
 
   # Seed replay buffer with some random episodes to kick off training.
