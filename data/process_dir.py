@@ -69,7 +69,7 @@ def convert_new_file(df):
   for c in ['Open', 'High', 'Low', 'Close']:
     df[c] = df[c] + offset
 
-  df = df.rename({
+  df.rename({
     'Date': 'date',
     'Open': 'open',
     'High': 'high',
