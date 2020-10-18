@@ -189,7 +189,12 @@ class ATM(Worker):
     # This is so the same network can be used on $1000 stock or $1 stock.
     return sub_array.flatten().tolist()
 
-  def one_episode(self, data, action_fn, render, png_path):
+  def one_episode(self,
+                  action_data,
+                  position_data,
+                  action_fn,
+                  render,
+                  png_path):
     cur_pos = _Position()
     # Random starting index.
     episode = []
@@ -198,19 +203,20 @@ class ATM(Worker):
 
     # data only contains the period we are supposed to trade on.
     # So we know that the first trading day is on self._history row.
-    obs = self.get_obs(data, self._history)
-    for i in range(self._history, len(data)):
-      price = data[i, 4]
+    obs = self.get_obs(action_data, self._history)
+    for i in range(self._history, len(action_data)):
+      # raw_price is used to actually conduct the trade.
+      position_price = position_data[i, 4]
 
       # TODO(jungong) : add stop-loss.
-      if i == len(data) - 1:
+      if i == len(action_data) - 1:
         # This is the last frame. Make sure we close whatever is open.
-        action, reward, done = cur_pos.force_close(price)
+        action, reward, done = cur_pos.force_close(position_price)
       else:
         # Otherwise, do whatever the agent tells us to.
         action = action_fn(obs)
-        reward, done = cur_pos.action(action, price)
-      next_obs = self.get_obs(data, i + 1)
+        reward, done = cur_pos.action(action, position_price)
+      next_obs = self.get_obs(action_data, i + 1)
 
       episode.append([obs, action, reward, next_obs, done])
       obs = next_obs
@@ -231,7 +237,7 @@ class ATM(Worker):
 
     if render:
       # TODO(jungong) : plot actions in the chart.
-      plot.plot_chart(data, mask=pos_mask, png_path=png_path)
+      plot.plot_chart(position_data, mask=pos_mask, png_path=png_path)
 
     return episode, cur_pos
 
@@ -259,7 +265,9 @@ class ATM(Worker):
       return agent.get_action(self._obs_to_tensor(obs), eval=eval)
 
     # Now actually generate the episode.
-    episode, _ = self.one_episode(data, action_fn, render, None)
+    # For training, trade outcome doesn't really matter, so simply
+    # use log scaled price data as position data.
+    episode, _ = self.one_episode(data, data, action_fn, render, None)
     return episode
 
   def eval(self, agent, num_days = 300, render=False, png_path=None):
@@ -269,9 +277,17 @@ class ATM(Worker):
     # the 3000th row (late 2015).
     data = data[3000 - self._history:3000 + num_days,:]
 
+    # For eval though, we want to know exactly how the position will
+    # turn out in the end. So we need to load the raw prices for
+    # determining position size.
+    raw_data = np.load('data/test/SPY_raw.npy')
+    # Same range as above.
+    raw_data = raw_data[3000 - self._history:3000 + num_days,:]
+
     def action_fn(obs):
       return agent.get_action(self._obs_to_tensor(obs), eval=True)
 
-    _, position = self.one_episode(data, action_fn, render, png_path)
+    _, position = self.one_episode(
+      data, raw_data, action_fn, render, png_path)
 
     return position.asset()
