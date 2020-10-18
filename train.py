@@ -11,7 +11,14 @@ import workers
 tf.get_logger().setLevel('ERROR')
 
 
-def train_loop(config, worker, replay_buffer, agent):
+def train_loop(base_dir, config, worker, replay_buffer, agent):
+  progress_file = os.path.join(base_dir, 'progress.csv')
+  # Reset progress file.
+  with open(progress_file, 'w') as f:
+    f.write('Step,Loss,Eval\n')
+
+  chkpt_base_dir = os.path.join(base_dir, 'checkpoints')
+
   step = 0
   while step < config.training_steps:
     obs, actions, rewards, next_obs, done = replay_buffer.sample_batch(
@@ -30,13 +37,14 @@ def train_loop(config, worker, replay_buffer, agent):
       agent.update_target_network()
 
     if step % config.eval_steps == 0:
-      print('Step {}, loss {}, epsilon {}'.format(
-        step, loss, agent.get_epsilon()))
-      print('Eval: {}'.format(worker.eval(agent)))
+      eval = worker.eval(agent)
+      print('Step {}, loss {}, epsilon {}, eval {}'.format(
+        step, loss, agent.get_epsilon(), eval))
+      with open(progress_file, 'a') as f:
+        f.write('{},{},{}\n'.format(step, loss, eval))
 
     if step % config.checkpoint_steps == 0 and step > 0:
-      chkpt_path = os.path.join(
-        'checkpoints', worker.name(), '{:010d}'.format(step))
+      chkpt_path = os.path.join(chkpt_base_dir, '{:010d}'.format(step))
       print('Checkpointing model to: {}'.format(chkpt_path))
       agent.checkpoint_model(chkpt_path)
 
@@ -56,18 +64,21 @@ def main():
                           worker.num_actions(),
                           config)
 
+  base_dir = os.path.join('__out__', worker.name())
+  os.makedirs(base_dir, exist_ok=True)
+
   # Seed replay buffer with some random episodes to kick off training.
   new_frames = 0
   while new_frames < config.batch_size:
     new_frames += replay_buffer.add_episode(worker.episode(agent))
 
   try:
-    train_loop(config, worker, replay_buffer, agent)
+    train_loop(base_dir, config, worker, replay_buffer, agent)
   except KeyboardInterrupt:
-    print('Training stopped, final eval: {}'.format(worker.eval(agent, True)))
+    print('Training stopped, final eval: {}'.format(
+      worker.eval(agent, True)))
 
-    chkpt_path = os.path.join(
-      'checkpoints', worker.name(), 'last')
+    chkpt_path = os.path.join(base_dir, 'checkpoints', 'last')
     print('Checkpointing model to: {}'.format(chkpt_path))
     agent.checkpoint_model(chkpt_path)
 
