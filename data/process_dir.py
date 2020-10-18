@@ -19,10 +19,10 @@ parser.add_argument(
         'while "new" only has adj-close, and does NOT support splits.'))
 
 parser.add_argument(
-  '--log_scale_price',
-  type=bool,
-  default=True,
-  help=('Whether to turn price columns into log scale.'))
+  '--price_scale',
+  type=str,
+  default='log',
+  help=('Whether to use log scale or linear scale price.'))
 
 args = parser.parse_args()
 
@@ -105,7 +105,7 @@ def convert_file(path):
   # so sudden pop/drop doesn't screw our percentage diff computation.
   # TODO(jungong) : maybe we should do this before calculating all the
   # MAs. Not sure.
-  if args.log_scale_price:
+  if args.price_scale == 'log':
     for col in ('open',
                 'high',
                 'low',
