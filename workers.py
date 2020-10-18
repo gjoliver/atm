@@ -56,14 +56,16 @@ class CartPole(Worker):
       if done: break
     return episode
 
-  def episode(self, agent, eval=False, render=False):
+  def episode(self, agent, eval=False):
     def action_fn(obs):
-      if render: self._env.render()
       return agent.get_action(self._obs_to_tensor(obs), eval)
     return self.play(action_fn)
 
   def eval(self, agent, render=False, png_path=None):
-    return len(self.episode(agent, eval=True, render=render))
+    def action_fn(obs):
+      if render: self._env.render()
+      return agent.get_action(self._obs_to_tensor(obs), True)
+    return len(self.play(action_fn))
 
 
 class T(IntEnum):
@@ -83,6 +85,8 @@ class _Position(object):
   # Right now, always 0 reward until the end of an episode.
   def __init__(self):
     self._asset = 1.0
+    self._trades = []
+    self._mask = []
     # TODO(jungong) : handle cumulative rewards.
     self.reset_position()
 
@@ -93,16 +97,35 @@ class _Position(object):
   def asset(self):
     return self._asset
 
+  def trades(self):
+    return self._trades
+
+  def mask(self):
+    return self._mask
+
   def type(self):
     return self._pt
 
   def reward(self, close_price):
     if self._pt == PT.NO_POSITION:
       return 0
+    # Scaled.
     pl = util.ScalePL(close_price, self._entry_price)
     return pl if self._pt == PT.LONG else -pl
 
+  def pl(self, close_price):
+    # Linear.
+    pl = (close_price - self._entry_price) / self._entry_price
+    return pl if self._pt == PT.LONG else -pl
+
   def action(self, action, price):
+    r, done = self.action_impl(action, price)
+    # Everytime there is an action, we append another position type to
+    # our mask.
+    self._mask.append(self.type())
+    return r, done
+
+  def action_impl(self, action, price):
     if action == T.HOLD:
       return 0, False
 
@@ -115,20 +138,23 @@ class _Position(object):
     if action == T.BUY and self._pt == PT.NO_POSITION:
       self._pt = PT.LONG
       self._entry_price = price
+      self._trades.append(price)
       return 0, False
 
     # Open short position.
     if action == T.SELL and self._pt == PT.NO_POSITION:
       self._pt = PT.SHORT
       self._entry_price = price
+      self._trades.append(-price)
       return 0, False
 
     if ((action == T.BUY and self._pt == PT.SHORT) or  # Buy to close.
         (action == T.SELL and self._pt == PT.LONG)):   # Sell to close.
       r = self.reward(price)
 
-      self._asset *= (1.0 + r)
+      self._asset *= (1.0 + self.pl(price))
       self.reset_position()
+      self._trades.append(price if action == T.BUY else -price)
 
       return r, True
 
@@ -189,18 +215,10 @@ class ATM(Worker):
     # This is so the same network can be used on $1000 stock or $1 stock.
     return sub_array.flatten().tolist()
 
-  def one_episode(self,
-                  action_data,
-                  position_data,
-                  action_fn,
-                  render,
-                  png_path):
+  def one_episode(self, action_data, position_data, action_fn):
     cur_pos = _Position()
     # Random starting index.
     episode = []
-    # For rendering purpose.
-    pos_mask = [PT.NO_POSITION] * self._history
-
     # data only contains the period we are supposed to trade on.
     # So we know that the first trading day is on self._history row.
     obs = self.get_obs(action_data, self._history)
@@ -221,9 +239,6 @@ class ATM(Worker):
       episode.append([obs, action, reward, next_obs, done])
       obs = next_obs
 
-      # Remember the state of the position for rendering purpose.
-      pos_mask.append(cur_pos.type())
-
       if done:
         if not eval:
           # Return if not in eval mode. We use a single trade for training.
@@ -234,10 +249,6 @@ class ATM(Worker):
 
     # After trading finishes, we should have no position.
     assert cur_pos.type() == PT.NO_POSITION
-
-    if render:
-      # TODO(jungong) : plot actions in the chart.
-      plot.plot_chart(position_data, mask=pos_mask, png_path=png_path)
 
     return episode, cur_pos
 
@@ -251,7 +262,7 @@ class ATM(Worker):
       data = np.load(random.sample(fs, 1)[0])
     return data
 
-  def episode(self, agent, eval=False, render=False):
+  def episode(self, agent, eval=False):
     data = self._load_good_data()
 
     # Pick a random point to trade.
@@ -267,7 +278,7 @@ class ATM(Worker):
     # Now actually generate the episode.
     # For training, trade outcome doesn't really matter, so simply
     # use log scaled price data as position data.
-    episode, _ = self.one_episode(data, data, action_fn, render, None)
+    episode, _ = self.one_episode(data, data, action_fn)
     return episode
 
   def eval(self, agent, num_days = 300, render=False, png_path=None):
@@ -287,7 +298,13 @@ class ATM(Worker):
     def action_fn(obs):
       return agent.get_action(self._obs_to_tensor(obs), eval=True)
 
-    _, position = self.one_episode(
-      data, raw_data, action_fn, render, png_path)
+    _, position = self.one_episode(data, raw_data, action_fn)
+
+    if render:
+      # To debug and see actual entries/exits, uncomment this line.
+      # print(position.trades())
+      plot.plot_chart(raw_data,
+                      mask=[PT.NO_POSITION] * self._history + position.mask(),
+                      png_path=png_path)
 
     return position.asset()
