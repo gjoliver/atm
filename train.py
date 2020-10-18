@@ -10,6 +10,7 @@ import workers
 
 tf.get_logger().setLevel('ERROR')
 
+
 def train_loop(config, worker, replay_buffer, agent):
   step = 0
   while step < config.training_steps:

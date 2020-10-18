@@ -35,8 +35,8 @@ atm = DotDict({
   'checkpoint_steps': 1000,
   'earliest_start_idx': 200,
   'eps_start': 0.3,
-  'eps_end': 0.01,
-  'eps_decay_steps': 1000,
+  'eps_end': 0.02,
+  'eps_decay_steps': 100,
   'eps_decay_rate': 0.95,
   'eval_steps': 100,
   'gamma': 0.95,  # If we do n-step update, gamma needs to be updated too.
